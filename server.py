@@ -1,4 +1,15 @@
 import os
+import subprocess
+
+# 📂 Background Repo Pull Engine (If SDK folder is missing)
+if not os.path.exists("nubra_python_sdk"):
+    print("Downloading Nubra SDK from Option Chain repo...")
+    subprocess.run(["git", "clone", "https://github.com/nitesh-optionchain/nifty-option-chain.git", "temp_repo"])
+    # Folder ko sahi jagah move karne ke liye system commands
+    if os.path.exists("temp_repo/nubra_python_sdk"):
+        os.rename("temp_repo/nubra_python_sdk", "./nubra_python_sdk")
+    print("SDK successfully integrated!")
+
 import time
 import threading
 from flask import Flask, send_from_directory, jsonify, request
