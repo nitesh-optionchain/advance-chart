@@ -1,8 +1,0 @@
-flask==3.0.2
-python-dotenv==1.0.1
-requests==2.31.0
-numpy==1.26.4
-pydantic==2.6.4
-pydantic-core==2.16.3
-annotated-types==0.6.0
-typing-extensions==4.10.0
