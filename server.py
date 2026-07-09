@@ -81,6 +81,11 @@ def get_live_data():
 def serve_index():
     return send_from_directory(BASE_DIR, 'index.html')
 
+# 👇 YEH NYA ROUTE ADD KAR DIJIYE (Baki JS files ko load karne ke liye)
+@app.route('/<path:path>')
+def serve_static_files(path):
+    return send_from_directory(BASE_DIR, path)
+    
 if __name__ == '__main__':
     data_thread = threading.Thread(target=fetch_data_stream_loop, daemon=True)
     data_thread.start()
