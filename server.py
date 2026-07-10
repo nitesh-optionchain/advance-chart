@@ -40,34 +40,48 @@ from nubra_python_sdk.marketdata.market_data import MarketData
 st.title("📈 Advanced Real-Time Chart (NIFTY & SENSEX)")
 
 # ========================================================
-# 🔐 UPDATED: Direct Streamlit Secrets Independent Login Engine
+# 🔐 FINAL BULLETPROOF AUTH SYSTEM (Secrets to Env Bridge)
 # ========================================================
-# Purana Anti-Crash guard hata kar direct secrets fetch engine lagaya
-PHONE_NO = st.secrets.get("PHONE_NO") or os.environ.get("PHONE_NO")
-MPIN = st.secrets.get("MPIN") or os.environ.get("MPIN")
+# Streamlit Secrets se data fetch kar rahe hain
+SECRET_PHONE = st.secrets.get("PHONE_NO")
+SECRET_MPIN = st.secrets.get("MPIN")
+
+# OS Environment variables se fallback check
+PHONE_NO = SECRET_PHONE or os.environ.get("PHONE_NO")
+MPIN = SECRET_MPIN or os.environ.get("MPIN")
+
+# ⚡ CRITICAL BRIDGE: Streamlit Secrets ko OS Environment me inject kar rahe hain
+# Kyunki background WebSocket thread sirf os.environ ko sahi se read kar pata hai
+if SECRET_PHONE and SECRET_MPIN:
+    os.environ["PHONE_NO"] = str(SECRET_PHONE)
+    os.environ["MPIN"] = str(SECRET_MPIN)
+    print(f"✅ Bridge Active: Credentials injected into OS Environment for {str(SECRET_PHONE)[:5]}*****")
+else:
+    print("⚠️ Warning: Credentials missing in Streamlit Secrets!")
 
 def get_nubra_session():
     try:
-        # Agar secrets mil gaye hain, toh unhe direct pass karke 24-hr independent token banayenge
         if PHONE_NO and MPIN:
-            print(f"🔒 Chart Page Independent Login Active for: {PHONE_NO[:5]}*****")
-            return InitNubraSdk(NubraEnv.PROD, phone_no=PHONE_NO, mpin=MPIN)
+            print("🔄 Initializing SDK via direct parameters...")
+            return InitNubraSdk(NubraEnv.PROD, phone_no=str(PHONE_NO), mpin=str(MPIN))
         else:
-            # Fallback agar environment credentials switch ho
+            print("🔄 Falling back to SDK default env_creds mode...")
             return InitNubraSdk(NubraEnv.PROD, env_creds=True)
     except Exception as e:
-        print(f"❌ Chart Page Auth Failed: {e}")
+        print(f"❌ SDK Login Exception: {str(e)}")
         return None
 
-# Session start karein
+# Initial Core Check
 nubra_client = get_nubra_session()
 
 if nubra_client is None:
-    st.error("❌ Independent Login Fail ho gaya! Kripya check karein ki Streamlit Dashboard ke Secrets me PHONE_NO aur MPIN sahi se daale hain ya nahi.")
+    st.error("❌ Independent Login Fail ho gaya! Kripya Streamlit Cloud par Secrets check karein.")
     st.stop()
+else:
+    print("🚀 Master Core Token successfully verified for main page context.")
 # ========================================================
 
-# Dual Asset Database Memory Structure (Streamlit Session me save karenge taaki refresh par data na khoye)
+# Dual Asset Database Memory Structure
 if "master_storage" not in st.session_state:
     st.session_state.master_storage = {
         "NIFTY": {"price": 2444990, "status": "LIVE", "master_history": []},
@@ -76,35 +90,42 @@ if "master_storage" not in st.session_state:
 
 # Global pipeline start karne ke liye check
 if "pipeline_active" not in st.session_state:
-    market_engine = MarketData(nubra_client) if nubra_client else None
-
+    
     def fetch_data_stream_loop():
         print("Dual Asset Master Pipeline Active (NIFTY & SENSEX)...")
+        
+        # 🧵 Thread ke ANDAR login aur engine generate kar rahe hain taaki WebSocket ko fresh context mile
+        thread_client = get_nubra_session()
+        thread_market_engine = MarketData(thread_client) if thread_client else None
+        
+        if not thread_market_engine:
+            print("❌ Background Engine failed to start due to missing Auth Token inside thread!")
+            return
+
         while True:
             try:
-                if market_engine:
-                    # 1. Fetch NIFTY Data
-                    nifty_snap = market_engine.current_price("NIFTY", exchange="NSE")
-                    if nifty_snap and nifty_snap.price:
-                        real_nifty = float(nifty_snap.price) / 100
-                        st.session_state.master_storage["NIFTY"]["price"] = int(nifty_snap.price)
-                        st.session_state.master_storage["NIFTY"]["master_history"].append({
-                            "open": real_nifty, "high": real_nifty, "low": real_nifty, "close": real_nifty
-                        })
-                        if len(st.session_state.master_storage["NIFTY"]["master_history"]) > 1000:
-                            st.session_state.master_storage["NIFTY"]["master_history"].pop(0)
+                # 1. Fetch NIFTY Data
+                nifty_snap = thread_market_engine.current_price("NIFTY", exchange="NSE")
+                if nifty_snap and nifty_snap.price:
+                    real_nifty = float(nifty_snap.price) / 100
+                    st.session_state.master_storage["NIFTY"]["price"] = int(nifty_snap.price)
+                    st.session_state.master_storage["NIFTY"]["master_history"].append({
+                        "open": real_nifty, "high": real_nifty, "low": real_nifty, "close": real_nifty
+                    })
+                    if len(st.session_state.master_storage["NIFTY"]["master_history"]) > 1000:
+                        st.session_state.master_storage["NIFTY"]["master_history"].pop(0)
 
-                    # 2. Fetch SENSEX Data
-                    sensex_snap = market_engine.current_price("SENSEX", exchange="BSE")
-                    if sensex_snap and sensex_snap.price:
-                        real_sensex = float(sensex_snap.price) / 100
-                        st.session_state.master_storage["SENSEX"]["price"] = int(sensex_snap.price)
-                        st.session_state.master_storage["SENSEX"]["status"] = "LIVE"
-                        st.session_state.master_storage["SENSEX"]["master_history"].append({
-                            "open": real_sensex, "high": real_sensex, "low": real_sensex, "close": real_sensex
-                        })
-                        if len(st.session_state.master_storage["SENSEX"]["master_history"]) > 1000:
-                            st.session_state.master_storage["SENSEX"]["master_history"].pop(0)
+                # 2. Fetch SENSEX Data
+                sensex_snap = thread_market_engine.current_price("SENSEX", exchange="BSE")
+                if sensex_snap and sensex_snap.price:
+                    real_sensex = float(sensex_snap.price) / 100
+                    st.session_state.master_storage["SENSEX"]["price"] = int(sensex_snap.price)
+                    st.session_state.master_storage["SENSEX"]["status"] = "LIVE"
+                    st.session_state.master_storage["SENSEX"]["master_history"].append({
+                        "open": real_sensex, "high": real_sensex, "low": real_sensex, "close": real_sensex
+                    })
+                    if len(st.session_state.master_storage["SENSEX"]["master_history"]) > 1000:
+                        st.session_state.master_storage["SENSEX"]["master_history"].pop(0)
                             
             except Exception as error:
                 print(f"Data Pipe Warning: {error}")
