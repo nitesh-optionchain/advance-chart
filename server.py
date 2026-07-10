@@ -4,6 +4,7 @@ import os
 import subprocess
 import time
 import threading
+import json  # 🧠 Fixed: Missing import jo json.dumps ke liye zaroori hai
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -36,12 +37,35 @@ if BASE_DIR not in sys.path:
 from nubra_python_sdk.start_sdk import InitNubraSdk, NubraEnv
 from nubra_python_sdk.marketdata.market_data import MarketData
 
-# 🛡️ Anti-Crash Guard: Agar user main page se login karke nahi aaya
-if 'PHONE_NO' not in st.session_state:
-    st.warning("⚠️ Kripya pehle Main Dashboard par login karein!")
-    st.stop()
-
 st.title("📈 Advanced Real-Time Chart (NIFTY & SENSEX)")
+
+# ========================================================
+# 🔐 UPDATED: Direct Streamlit Secrets Independent Login Engine
+# ========================================================
+# Purana Anti-Crash guard hata kar direct secrets fetch engine lagaya
+PHONE_NO = st.secrets.get("PHONE_NO") or os.environ.get("PHONE_NO")
+MPIN = st.secrets.get("MPIN") or os.environ.get("MPIN")
+
+def get_nubra_session():
+    try:
+        # Agar secrets mil gaye hain, toh unhe direct pass karke 24-hr independent token banayenge
+        if PHONE_NO and MPIN:
+            print(f"🔒 Chart Page Independent Login Active for: {PHONE_NO[:5]}*****")
+            return InitNubraSdk(NubraEnv.PROD, phone_no=PHONE_NO, mpin=MPIN)
+        else:
+            # Fallback agar environment credentials switch ho
+            return InitNubraSdk(NubraEnv.PROD, env_creds=True)
+    except Exception as e:
+        print(f"❌ Chart Page Auth Failed: {e}")
+        return None
+
+# Session start karein
+nubra_client = get_nubra_session()
+
+if nubra_client is None:
+    st.error("❌ Independent Login Fail ho gaya! Kripya check karein ki Streamlit Dashboard ke Secrets me PHONE_NO aur MPIN sahi se daale hain ya nahi.")
+    st.stop()
+# ========================================================
 
 # Dual Asset Database Memory Structure (Streamlit Session me save karenge taaki refresh par data na khoye)
 if "master_storage" not in st.session_state:
@@ -50,15 +74,8 @@ if "master_storage" not in st.session_state:
         "SENSEX": {"price": 8035000, "status": "LIVE", "master_history": []}
     }
 
-def get_nubra_session():
-    try:
-        return InitNubraSdk(NubraEnv.PROD, env_creds=True)
-    except:
-        return None
-
 # Global pipeline start karne ke liye check
 if "pipeline_active" not in st.session_state:
-    nubra_client = get_nubra_session()
     market_engine = MarketData(nubra_client) if nubra_client else None
 
     def fetch_data_stream_loop():
@@ -105,7 +122,7 @@ if os.path.exists(html_file_path):
         html_content = f.read()
     
     # Live data ko Javascript chart me inject karne ke liye bridge
-    # Yeh aapki purani API (/api/live-data) ka kaam karega bina Flask ke
+    # Yeh aapki purani API ka kaam karega bina Flask ke
     json_data = json.dumps(st.session_state.master_storage)
     html_content = html_content.replace("/*DATA_PLACEHOLDER*/", f"window.chartData = {json_data};")
     
