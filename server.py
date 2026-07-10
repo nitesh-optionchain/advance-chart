@@ -129,17 +129,36 @@ if "pipeline_active" not in st.session_state:
     data_thread.start()
     st.session_state.pipeline_active = True
 
-# 🌐 HTML Chart Insertion Logic
-html_file_path = os.path.join(BASE_DIR, 'index.html')
+# 🌐 HTML Chart Insertion Logic (Direct GitHub Fetch Engine)
+import requests
 
-if os.path.exists(html_file_path):
-    with open(html_file_path, "r", encoding="utf-8") as f:
-        html_content = f.read()
+# Aapki advance-chart repo ka raw link jahan index.html rakhi hai
+github_raw_url = "https://raw.githubusercontent.com/nitesh-optionchain/advance-chart/main/index.html"
+
+try:
+    # 📡 GitHub se direct HTML content fetch kar rahe hain
+    response = requests.get(github_raw_url, timeout=10)
     
-    # Static string replacement for global bridge injection
-    json_data = json.dumps(global_master_storage)
-    html_content = html_content.replace("/*DATA_PLACEHOLDER*/", f"window.chartData = {json_data};")
-    
-    components.html(html_content, height=650, scrolling=True)
-else:
-    st.error("❌ 'index.html' file structure main target directory me nahi mili!")
+    if response.status_code == 200:
+        html_content = response.text
+        
+        # 🔐 Auth Credentials ko Javascript window context me inject kar rahe hain
+        auth_payload = {
+            "PHONE_NO": os.environ.get("PHONE_NO", ""),
+            "MPIN": os.environ.get("MPIN", ""),
+            "STATUS": "ACTIVE"
+        }
+        
+        json_data = json.dumps(auth_payload)
+        html_content = html_content.replace(
+            "<head>", 
+            f"<head><script>window.streamAuthContext = {json_data};</script>"
+        )
+        
+        # 📊 Rendering embedded component block
+        components.html(html_content, height=780, scrolling=True)
+    else:
+        st.error(f"❌ GitHub se index.html fetch nahi ho saki! (Status Code: {response.status_code})")
+
+except Exception as fetch_err:
+    st.error(f"❌ Connection Error: {str(fetch_err)}")
